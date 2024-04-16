@@ -1,19 +1,22 @@
 import fbx
 import csv
 from collections import deque
+from scipy.spatial import ConvexHull
 import pymel.core as pm
 import maya.cmds as cmds
-import maya.OpenMaya as OpenMaya
-# from utils import total_vertex
+import maya.api.OpenMaya as OpenMaya
+from delete_joint_weight import refine_weights
 
-
+eps = 1e-3
+error_thres = 1.0
 
 class Skeleton_node:
-    def __init__(self, name, parent=None, level=0, weight=0, loss=0, deleted=False):
+    def __init__(self, name, parent=None, level=0, stability = False, weight=0, loss=0, deleted=False):
         self.name = name
         self.parent = parent
         self.children = []
         self.level = level
+        self.stable = stability
         self.deleted = deleted
         self.weight = weight
         self.loss = loss
@@ -29,8 +32,11 @@ def map_value(x, x_min, x_max, y_min=0, y_max=100):
     mapped_value = y_min + (normalized_value * (y_max - y_min))
     return clamp(mapped_value, y_min, y_max)
 
+def normalization(x, x_min=0, x_max=1):
+    return (x-x_min)/(x_max-x_min)
 
-def compute_weight(joint_name):
+def compute_vtx_num(joint_name):
+    from utils import total_vertex
     skinClusters = cmds.ls(type='skinCluster')
     vertexCount = 0
     
@@ -55,21 +61,54 @@ def compute_weight(joint_name):
     return weight
 
 
+def compute_vtx_volumn(joint_name):
+    joint = pm.PyNode(joint_name)
+    
+    skin_clusters = joint.listConnections(type="skinCluster", source=False)
+    if not skin_clusters: #根本没有绑定的点
+        return 1.0
+    vtx_position = []
+    
+    for skin_cluster in skin_clusters:
+        # influences = skin_cluster.influenceObjects()
+        influences = pm.skinCluster(skin_cluster, query=True, influence=True)
+        if joint not in influences:
+            continue
+            # raise RuntimeError(f"Can't find the {joint}.")
+        
+        joint_index = influences.index(joint)
+        geometry = skin_cluster.getGeometry()[0]
+        weights = skin_cluster.getWeights(geometry)
+        weights = list(weights)
+        
+        vtxs_indices = [i for i, w in enumerate(weights) if w[joint_index] > 0]
+        vertices_world_position = [geometry.vtx[i].getPosition(space='world') for i in vtxs_indices]
+    
+        vtx_position += vertices_world_position
+    # print(vtx_position)
+    if len(vtx_position) < 4: #绑定的顶点数目小于4，无法计算空间大小。
+        return 5.0
+        
+    hull = ConvexHull(vtx_position)
+    volumn = hull.volume
+    return volumn
+    
+
 def create_skeleton_tree(fbx_node, parent_skeleton_node=None, level=0):
     root = None
     current_skeleton_node = None
+    stable_list = ["FBX_C_Reference", "FBX_Basketball", "Ball_Root", "FBX_C_Hips", "FBX_R_Pelvis0"]
     node_attribute = fbx_node.GetNodeAttribute() # 检查当前节点是否是骨骼类型
     if (
         node_attribute
         and node_attribute.GetAttributeType() == fbx.FbxNodeAttribute.eSkeleton
     ):
         node_name = fbx_node.GetName()
-        node_weight = 10.0 / level
-        # print(f"{node_name} have {node_weight} weight, {level} level.")
-        delete_flag = False
-        if level == 14: delete_flag = True
+        node_weight = compute_vtx_volumn(node_name)
+        # print(f"{node_name} have {node_weight} weight.")
+        stability = True if node_name in stable_list else False
         current_skeleton_node = Skeleton_node(
-            node_name, parent_skeleton_node, level, node_weight, deleted=delete_flag
+            node_name, parent_skeleton_node, level, stability, node_weight
         )
         if parent_skeleton_node is None:
             root = current_skeleton_node  # 如果是根骨骼节点，则记录为root
@@ -159,33 +198,54 @@ def search_csv_data(search_name):
     print("Error! No matching data")
 
 
-# 动态规划解法
-def knapsack(nodes, threshold):
-    n = len(nodes)
-    dp = [[0 for _ in range(threshold + 1)] for _ in range(n + 1)]
+def cp_transform(tra_A, tra_B, rot_A, rot_B):
+    tran_sub = [abs(a - b) for a, b in zip(tra_A, tra_B)]
+    flag = all(dimention<eps for dimention in tran_sub)
+    if flag: # 表示translation没有改变
+        rot_sub = [abs(a - b) for a, b in zip(rot_A, rot_B)]
+        flag = all(dimention<error_thres for dimention in rot_sub)
+        return flag # 表示rotation在可控范围内
+    else: return flag
 
-    for i in range(1, n + 1):
-        weight = nodes[i - 1].weight
-        loss = nodes[i - 1].loss
-        for j in range(1, threshold + 1):
-            if loss <= j:
-                dp[i][j] = max(dp[i - 1][j], dp[i - 1][j - loss] + weight)
-            else:
-                dp[i][j] = dp[i - 1][j]
 
-    max_weight = dp[n][threshold]
+def extract_joint_data(joint_name, start_time, end_time):
+    if not cmds.ls(joint_name, type = "joint"):
+        cmds.warning(f"No joint {joint_name} found in the scene.")
+        return {}
+    
+    cmds.currentTime(start_time)
+    prev_tran = cmds.getAttr(f"{joint_name}.translate")[0]
+    prev_rot  = cmds.getAttr(f"{joint_name}.rotate")[0]
+    
+    for frame in range(start_time+1, end_time+1):
+        cmds.currentTime(frame)
+    
+        cur_tran = cmds.getAttr(f"{joint_name}.translate")[0] # 查到的是相较于父节点的局部变化，如果要全局变化需要设置 worldSpace=True
+        cur_rot = cmds.getAttr(f"{joint_name}.rotate")[0]
+        
+        # print(f"{cur_tran}, {prev_tran}, {cur_rot}, {prev_rot}")
+        if cp_transform(prev_tran, cur_tran, prev_rot, cur_rot):
+            prev_tran = cur_tran
+            prev_rot = cur_rot
+            continue
+        else:
+            return False
+    return True
 
-    j = threshold
-    for i in range(n, 0, -1):
-        if dp[i][j] != dp[i - 1][j]:
-            nodes[i - 1].deleted = True
-            j -= nodes[i - 1].loss
 
-    for node in nodes:
-        if node.deleted:
-            print("Delete: " + node.name)
-
-    return max_weight
+def extract_all_joint_data(root):
+    start_time = int(pm.playbackOptions(query=True, minTime=True))
+    end_time = int(pm.playbackOptions(query=True, maxTime=True))
+    node_list = postorder_traversal(root)
+    for node in node_list:
+        if node.stable: 
+            # print(node.name + " is stable.")
+            continue
+        if extract_joint_data(node.name, start_time, end_time):
+            node.deleted = True
+            refine_weights(node.name)
+            # print(node.name+" can be deleted.")
+    return
 
 
 def construct_tree(fbx_file_path = "E:/Animation Data/batch_pass_ball_fbx/test.fbx"):
@@ -214,11 +274,39 @@ def construct_tree(fbx_file_path = "E:/Animation Data/batch_pass_ball_fbx/test.f
     # print_skeleton_tree(skeleton_tree_root)
     level_order_list = levelorder_travelsal(skeleton_tree_root)
     skeleton_node_list = sort_traversal(level_order_list)
-    return skeleton_node_list
+    return skeleton_tree_root, skeleton_node_list
 
     # create_csv(skeleton_node_list)
-
-    max_weight = knapsack(skeleton_node_list, 100)
-    print("Max Weight: " + str(max_weight))
     
-# node_list = construct_tree()
+    
+
+# 动态规划解法(暂时废弃)
+def knapsack(nodes, threshold):
+    n = len(nodes)
+    dp = [[0 for _ in range(threshold + 1)] for _ in range(n + 1)]
+
+    for i in range(1, n + 1):
+        weight = nodes[i - 1].weight
+        loss = nodes[i - 1].loss
+        for j in range(1, threshold + 1):
+            if loss <= j:
+                dp[i][j] = max(dp[i - 1][j], dp[i - 1][j - loss] + weight)
+            else:
+                dp[i][j] = dp[i - 1][j]
+
+    max_weight = dp[n][threshold]
+
+    j = threshold
+    for i in range(n, 0, -1):
+        if dp[i][j] != dp[i - 1][j]:
+            nodes[i - 1].deleted = True
+            j -= nodes[i - 1].loss
+
+    for node in nodes:
+        if node.deleted:
+            print("Delete: " + node.name)
+
+    return max_weight
+
+
+# construct_tree()

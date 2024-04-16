@@ -111,10 +111,10 @@ def render_setting():
     return start_time, end_time
 
 
-def render_frames(camera_name, lod_level, start_time, end_time, des_folder, move_flag=True):
+def render_frames(camera_name, lod_level, start_time, end_time, step, des_folder, move_flag=True):
     camera_shape = create_camera(camera_name, lod_level)
 
-    for frame in range(start_time, end_time+1):
+    for frame in range(start_time, end_time+1, step):
         pm.currentTime(frame)  # 设置当前帧
         pm.setAttr(camera_shape.renderable, True)  # 确保相机是可渲染的
         pm.render(camera_shape, x=512, y=512)  # 渲染当前帧
@@ -130,12 +130,12 @@ def render_frames(camera_name, lod_level, start_time, end_time, des_folder, move
 def render_anim(LOD_level, des_folder, move_flag=True):
     start_time, end_time = render_setting()
     for camera in camera_list:
-        render_frames(camera, LOD_level, start_time, end_time, des_folder, move_flag)
+        render_frames(camera, LOD_level, start_time, end_time, step, des_folder, move_flag)
     
         
         
-def screen_shot(start_time, end_time, des_path):
-    for frame in range(start_time, end_time+1):
+def screen_shot(start_time, end_time, step, des_path):
+    for frame in range(start_time, end_time+1, step):
         pm.currentTime(frame)
         
         img = ImageGrab.grab(bbox =(730, 300, 1242, 812))
@@ -145,6 +145,7 @@ def screen_shot(start_time, end_time, des_path):
 def get_screenshot(LOD_level, des_folder):
     start_time = int(pm.playbackOptions(query=True, minTime=True))
     end_time = int(pm.playbackOptions(query=True, maxTime=True))
+    step = 5
     for camera_name in camera_list:
         cur_camera = adjust_camera(camera_name, LOD_level)
         pm.lookThru(cur_camera)
@@ -153,5 +154,5 @@ def get_screenshot(LOD_level, des_folder):
         if not os.path.exists(des_path):
             os.mkdir(des_path)
             
-        screen_shot(start_time, end_time, des_path)
+        screen_shot(start_time, end_time, step, des_path)
      

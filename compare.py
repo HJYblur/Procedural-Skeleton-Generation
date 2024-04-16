@@ -1,5 +1,6 @@
 import os
 import cv2
+import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from render_animation import camera_list
 
@@ -25,6 +26,14 @@ def read_frames(image_folder):
 def calculate_frame_difference(frame_A, frame_B):
     similarity = ssim(frame_A, frame_B)
     difference = 1 - similarity
+    return difference
+
+
+def calculate_edge_difference(frame_A, frame_B):
+    edge1 = cv2.Canny(frame_A, 50, 150)
+    edge2 = cv2.Canny(frame_B, 50, 150)
+    
+    difference = np.mean((edge1-edge2)**2)
     return difference
 
 

@@ -4,7 +4,7 @@ import pymel as pm
 import sys
 import maya.cmds as cmds
 from importlib import reload
-from skeleton_tree import construct_tree
+from skeleton_tree import construct_tree, extract_all_joint_data
 from lod_generation import generate_combined_mesh_LOD, generate_combined_mesh_LODs, hide_LOD
 from delete_lod import delete_duplicate, batch_delete_lod
 from render_animation import render_anim, get_screenshot, create_camera_list
@@ -30,15 +30,16 @@ def set_display():
 def get_animation(type):
     generate_combined_mesh_LOD(LOD_level)
     delete_duplicate()
-    hide_LOD(i, LOD_level)
-    get_screenshot(i, type)
+    hide_LOD(LOD_level, LOD_level)
+    get_screenshot(LOD_level, type)
     batch_delete_lod()
 
 
 def greeedy_algorithm():
     ratio_dic = {}
     
-    for joint in joint_node_list[0:15]:
+    for joint in joint_node_list:
+        if joint.stable: continue
         joint_name = joint.name
         tmp_list = selected_list
         
@@ -57,7 +58,9 @@ def greeedy_algorithm():
             ratio_dic[joint_name] = joint.weight / joint.loss
             print(f"----{joint_name}     weight: {joint.weight}), loss:{joint.loss}, ratio: {ratio_dic[joint_name]}.")
             restore_weights(weights_backup)
-                
+              
+    if not ratio_dic: return ""
+    
     sorted_dic = {k:ratio_dic[k] for k in sorted(ratio_dic, key = ratio_dic.get, reverse=True)} # 降序排列
     target_joint_name = next(iter(sorted_dic))
     
@@ -70,14 +73,14 @@ def greeedy_algorithm():
 if __name__ == "__main__":
     DEBUG = False
     LOD_level = 1
-    Epoch = 5
+    Epoch = 1
     Low_Threshold = 0.85
     High_Threshold = 0.99
     selected_list = []
     set_display()
         
         
-    joint_node_list = construct_tree()
+    root_node, joint_node_list = construct_tree()
     if DEBUG:
         for node in joint_node_list:
             print(f"Get {node.name} with weight {node.weight}.")
@@ -95,24 +98,16 @@ if __name__ == "__main__":
     batch_delete_lod()
     print("Step2: Initial LOD generation Done.")
         
-        
+       
+    extract_all_joint_data(root_node)    
     ratio_dic = {}
-    for joint in joint_node_list[0:12]:
+    for joint in joint_node_list:
         joint_name = joint.name
+        if joint.stable: continue
         if joint.deleted: 
             print(f"----{joint_name} has been appended to the list.")
             selected_list.append(joint_name)
-        else:
-            weights_backup = refine_weights(joint_name)
-            get_animation("Experiment")
-            joint.loss = calculate_quality_difference(LOD_level)
-            if joint.loss > High_Threshold:
-                print(f"----Delete {joint_name}'s loss: {joint.loss}.")
-                selected_list.append(joint_name)
-                joint.deleted = True
-                restore_weights(weights_backup)
-                
-    print("Step3: Delete end joints Done.")
+    print("Step3: Delete selected joints Done.")
         
     
     for i in range(Epoch):
@@ -121,3 +116,6 @@ if __name__ == "__main__":
         print(f"In Epoch {i}, the deleted joint is {cur_joint}")
     print(f"Step4: Delete {Epoch} joints in total.")
     
+    
+    get_animation("SOTA")
+    print(f"Step5: Generate SOTA animation done.")
