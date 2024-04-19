@@ -97,7 +97,7 @@ def compute_vtx_volumn(joint_name):
 def create_skeleton_tree(fbx_node, parent_skeleton_node=None, level=0):
     root = None
     current_skeleton_node = None
-    stable_list = ["FBX_C_Reference", "FBX_Basketball", "Ball_Root", "FBX_C_Hips", "FBX_R_Pelvis0"]
+    stable_list = ["FBX_C_Reference", "FBX_Basketball", "Ball_Root", "FBX_C_Hips", "FBX_R_Pelvis0", "FBX_L_Shoulder0", "FBX_R_Shoulder0"]
     node_attribute = fbx_node.GetNodeAttribute() # 检查当前节点是否是骨骼类型
     if (
         node_attribute
@@ -308,5 +308,3 @@ def knapsack(nodes, threshold):
 
     return max_weight
 
-
-# construct_tree()

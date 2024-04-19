@@ -67,13 +67,11 @@ def delete_weights():
 
     
 def refine_weights(*args):
-    # import_weights()
     skeleton_joints = list(args)
     weights_backup = {}  # 用于保存原始权重信息
-    removed_weights_info = []  # To store information about removed weights
+    removed_weights_info = []  # 记录移除的权重信息
     
     for mesh in pm.ls(geometry=True):
-        # Find the skinCluster attached to the mesh
         skinClusters = pm.listHistory(mesh, type='skinCluster')
         if not skinClusters:
             # print(f"未找到 {mesh} 的蒙皮簇。")
@@ -81,53 +79,58 @@ def refine_weights(*args):
         
         skinCluster = skinClusters[0]
         
-        # Get all influences for the skinCluster
+        # In query mode, returns a string array of the influence objects (joints and transform).
         influences = pm.skinCluster(skinCluster, query=True, influence=True)
-        
         influences_to_remove = [inf for inf in influences if inf.name() in skeleton_joints]
         if not influences_to_remove:
-            # print(f"在 {skinCluster} 中未找到要移除的权重。")
+            # print(f"在 {skinCluster} 中未找到要移除的骨骼。")
             continue
         
         for vtx in mesh.vtx:
             # Check if the vertex is influenced by any joint to be removed
             weights = pm.skinPercent(skinCluster, vtx, query=True, value=True)
-            influenceIndices = pm.skinPercent(skinCluster, vtx, query=True, transform=None)
+            vtx_weights_to_remove = [(weight, inf) for inf, weight in zip(influences, weights) if inf in influences_to_remove and weight>0]
+            if not vtx_weights_to_remove: continue
             
-            vtx_weights = []
-            for inf, weight, _ in zip(influences, weights, influenceIndices):
-                if inf in influences_to_remove and weight > 0:
-                    vtx_weights.append((inf.name(), weight))
-                    try:
-                        pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0)], normalize=True)
-                    except RuntimeError as e:
-                        print(f"处理 {vtx.name()} 时发生错误：{e}")
-
-                    removed_weights_info.append((vtx.name(), [inf.name() for inf in influences_to_remove]))
-            if vtx_weights:
-                weights_backup[vtx.name()] = vtx_weights
-        
+            for weight, inf in vtx_weights_to_remove:
+                parent_inf = pm.listRelatives(inf, parent=True)
+                if not parent_inf: continue
+                
+                parent_inf = parent_inf[0]
+                
+                if vtx.name() not in weights_backup:
+                    weights_backup[vtx.name()] = []
+                    
+                if parent_inf.name() in influences:
+                    current_parent_weight = pm.skinPercent(skinCluster, vtx, transform=parent_inf, query=True)
+                    new_parent_weight = current_parent_weight + weight
+                    pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0), (parent_inf.name(), new_parent_weight)], normalize=True)
+                    removed_weights_info.append((vtx.name(), inf.name(), parent_inf.name(), weight, current_parent_weight))
+                    weights_backup[vtx.name()].append((inf.name(), parent_inf.name(), weight, current_parent_weight))
+                else:
+                    pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0)], normalize=True)
+                    removed_weights_info.append((vtx.name(), inf.name(), "", weight, 0))
+                    weights_backup[vtx.name()].append((inf.name(), "", weight, 0))
     # save_log(skeleton_joints[0], removed_weights_info)
     
     return weights_backup
 
 
 def restore_weights(weights_backup):
-    for vtx_name, weights in weights_backup.items():
+    for vtx_name, weights_info_list in weights_backup.items():
         vtx = pm.PyNode(vtx_name)
         geometry = vtx.node()
         his = pm.listHistory(geometry)
         skinClusters = pm.ls(his, type="skinCluster")
         skinCluster = skinClusters[0] if skinClusters else None
-        for inf_name, weight in weights:
+        for inf_name, parent_inf_name, weight, parent_weight in weights_info_list:
             if not pm.objExists(inf_name):
                 print(f"骨骼 {inf_name} 不存在。")
                 continue
-
-            try:
+            if parent_inf_name=="": 
                 pm.skinPercent(skinCluster, vtx, transformValue=[(inf_name, weight)], normalize=True)
-            except RuntimeError as e:
-                print(f"尝试对 '{vtx_name}' 设置权重时发生错误: {e}")
+            else:
+                pm.skinPercent(skinCluster, vtx, transformValue=[(inf_name, weight), (parent_inf_name, parent_weight)], normalize=True)
 
 
 
