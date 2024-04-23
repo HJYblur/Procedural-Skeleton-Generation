@@ -94,24 +94,24 @@ if __name__ == "__main__":
     print("Step2: Initial LOD generation Done.")
         
        
-    # extract_all_joint_data(root_node)    
-    # ratio_dic = {}
-    # delete_cnt = 0
-    # for joint in joint_node_list:
-    #     joint_name = joint.name
-    #     if joint.stable: continue
-    #     if joint.deleted: 
-    #         delete_cnt += 1
-    #         print(f"----{joint_name} has been appended to the list.")
-    #         selected_list.append(joint_name)
-    # print(f"Step3: Delete {delete_cnt} joints, counting for {delete_cnt/len(joint_node_list):.2%} of all joints. ")
+    extract_all_joint_data(root_node)    
+    ratio_dic = {}
+    delete_cnt = 0
+    for joint in joint_node_list:
+        joint_name = joint.name
+        if joint.stable: continue
+        if joint.deleted: 
+            delete_cnt += 1
+            print(f"----{joint_name} has been appended to the list.")
+            selected_list.append(joint_name)
+    print(f"Step3: Delete {delete_cnt} joints, counting for {delete_cnt/len(joint_node_list):.2%} of all joints. ")
         
     
-    # for i in range(Epoch):
-    #     print(f"====================Epoch {i}================================")
-    #     cur_joint = greeedy_algorithm()
-    #     print(f"In Epoch {i}, the deleted joint is {cur_joint}")
-    # print(f"Step4: Delete {Epoch} joints in total.")
+    for i in range(Epoch):
+        print(f"====================Epoch {i}================================")
+        cur_joint = greeedy_algorithm()
+        print(f"In Epoch {i}, the deleted joint is {cur_joint}")
+    print(f"Step4: Delete {Epoch} joints in total.")
     
     
     get_animation("SOTA")

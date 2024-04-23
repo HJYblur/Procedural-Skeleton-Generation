@@ -5,10 +5,13 @@ from scipy.spatial import ConvexHull
 import pymel.core as pm
 import maya.cmds as cmds
 import maya.api.OpenMaya as OpenMaya
-from delete_joint_weight import refine_weights
+# from delete_joint_weight import refine_weights
+import delete_joint_weight
+from importlib import reload
+reload(delete_joint_weight)
 
 eps = 1e-3
-error_thres = 1.0
+error_thres = 1
 
 class Skeleton_node:
     def __init__(self, name, parent=None, level=0, stability = False, weight=0, loss=0, deleted=False):
@@ -233,18 +236,59 @@ def extract_joint_data(joint_name, start_time, end_time):
     return True
 
 
+def set_bind_pose():
+    end_time = int(pm.playbackOptions(query=True, maxTime=True))
+    new_time = end_time + 1
+    pm.currentTime(new_time)
+    
+    ctrl_list = pm.ls("*_ctrl")
+    if not ctrl_list:
+        print("没有找到以 '_ctrl' 结尾的控制器。")
+        return None
+
+    for ctrl in ctrl_list:
+        try:
+            pm.setAttr(ctrl + ".translate", 0, 0, 0)
+            pm.setAttr(ctrl + ".rotate", 0, 0, 0)
+            pm.setKeyframe(ctrl, time=new_time)
+        except Exception as e:
+            continue
+            print(f"无法为 {ctrl} 设置关键帧：{e}")
+    
+    return int(new_time)
+
+
+
+def delete_bind_pose(time_to_delete):
+    obj = "*_ctrl"
+    attributes = ['translate', 'rotate']
+    for attribute in attributes:
+        # 这里查询的是有关键帧的时间，而不是关键帧对象
+        keyframes = pm.keyframe(obj, query=True, time=(time_to_delete, time_to_delete), attribute=attribute)
+        
+        if keyframes:
+            # cutKey 需要指定对象和属性，以及时间范围
+            pm.cutKey(obj, attribute=attribute, time=(time_to_delete, time_to_delete), option='keys')
+
+
+
 def extract_all_joint_data(root):
     start_time = int(pm.playbackOptions(query=True, minTime=True))
     end_time = int(pm.playbackOptions(query=True, maxTime=True))
     node_list = postorder_traversal(root)
+    extract_list = []
     for node in node_list:
         if node.stable: 
             # print(node.name + " is stable.")
             continue
         if extract_joint_data(node.name, start_time, end_time):
             node.deleted = True
-            refine_weights(node.name)
+            extract_list.append(node.name)
             # print(node.name+" can be deleted.")
+    # print(extract_list)
+    t = set_bind_pose()
+    delete_joint_weight.refine_weights(extract_list)
+    delete_bind_pose(t)
     return
 
 

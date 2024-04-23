@@ -60,16 +60,40 @@ def import_weights(file_path="E:/Procedural Skeleton/Log/Joint Weight Restoratio
             pm.skinPercent(skin_cluster, geometry, transformValue=[(influence, w) for w in weights])
 
 
-def delete_weights():
-    skin_clusters = pm.ls(typ="skinCluster")
-    for skin_cluster in skin_clusters:
-        pm.delete(skin_cluster)
-
+def update_bind_pose(skin_cluster):
+    skin_cluster_node = pm.PyNode(skin_cluster)
     
-def refine_weights(*args):
-    skeleton_joints = list(args)
-    weights_backup = {}  # 用于保存原始权重信息
-    removed_weights_info = []  # 记录移除的权重信息
+    bind_poses = pm.ls(type='dagPose', long=True)
+    
+    # 找到与skinCluster关联的绑定姿势节点
+    related_bind_pose = None
+    for bind_pose in bind_poses:
+        if skin_cluster_node in pm.dagPose(bind_pose, query=True, members=True):
+            related_bind_pose = bind_pose
+            break
+    
+    # 如果找到了绑定姿势，重置绑定姿势
+    if related_bind_pose:
+        pm.dagPose(related_bind_pose, reset=True, name=related_bind_pose)
+    else:
+        # 如果没有找到绑定姿势，创建一个新的
+        pm.dagPose(skin_cluster_node, save=True, name=skin_cluster + '_bindPose')
+
+
+def add_weight(skin_cluster, joint, weight=0.0):
+    skin_cluster_node = pm.PyNode(skin_cluster)
+    current_influences = skin_cluster_node.influenceObjects()
+    
+    if joint not in [inf.name() for inf in current_influences]:
+        skin_cluster_node.addInfluence(joint, weight = float(weight))
+        print(f"Add weight for {joint}")
+    
+    
+def refine_weights(joint=None, joint_list=None, list_flag=False):
+    if list_flag: skeleton_joints = joint_list
+    else: skeleton_joints = list(joint)
+    weights_backup = {}  # 保存原始权重信息,用于恢复
+    # removed_weights_info = []  # 记录移除的权重信息
     
     for mesh in pm.ls(geometry=True):
         skinClusters = pm.listHistory(mesh, type='skinCluster')
@@ -104,15 +128,19 @@ def refine_weights(*args):
                 if parent_inf.name() in influences:
                     current_parent_weight = pm.skinPercent(skinCluster, vtx, transform=parent_inf, query=True)
                     new_parent_weight = current_parent_weight + weight
-                    pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0), (parent_inf.name(), new_parent_weight)], normalize=True)
-                    removed_weights_info.append((vtx.name(), inf.name(), parent_inf.name(), weight, current_parent_weight))
-                    weights_backup[vtx.name()].append((inf.name(), parent_inf.name(), weight, current_parent_weight))
                 else:
-                    pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0)], normalize=True)
-                    removed_weights_info.append((vtx.name(), inf.name(), "", weight, 0))
-                    weights_backup[vtx.name()].append((inf.name(), "", weight, 0))
+                    # pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0)], normalize=True)
+                    # removed_weights_info.append((vtx.name(), inf.name(), "", weight, 0))
+                    # weights_backup[vtx.name()].append((inf.name(), "", weight, 0))
+                    add_weight(skinCluster, parent_inf)
+                    current_parent_weight = 0
+                    new_parent_weight = weight
+                
+                pm.skinPercent(skinCluster, vtx, transformValue=[(inf.name(), 0), (parent_inf.name(), new_parent_weight)], normalize=True)
+                # removed_weights_info.append((vtx.name(), inf.name(), parent_inf.name(), weight, current_parent_weight))
+                weights_backup[vtx.name()].append((inf.name(), parent_inf.name(), weight, current_parent_weight))
+                
     # save_log(skeleton_joints[0], removed_weights_info)
-    
     return weights_backup
 
 
@@ -127,10 +155,11 @@ def restore_weights(weights_backup):
             if not pm.objExists(inf_name):
                 print(f"骨骼 {inf_name} 不存在。")
                 continue
-            if parent_inf_name=="": 
-                pm.skinPercent(skinCluster, vtx, transformValue=[(inf_name, weight)], normalize=True)
-            else:
-                pm.skinPercent(skinCluster, vtx, transformValue=[(inf_name, weight), (parent_inf_name, parent_weight)], normalize=True)
+            elif not pm.objExists(parent_inf_name):
+                print(f"骨骼 {parent_inf_name} 不存在。")
+                continue
+                
+            pm.skinPercent(skinCluster, vtx, transformValue=[(inf_name, weight), (parent_inf_name, parent_weight)], normalize=True)
 
 
 
