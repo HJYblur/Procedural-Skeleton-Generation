@@ -73,12 +73,12 @@ def greeedy_algorithm():
 if __name__ == "__main__":
     LOD_level = 1
     Epoch = 1
-    Low_Threshold = 0.85
-    High_Threshold = 0.99
+    Low_Threshold = 0.995
+    High_Threshold = 0.9999
     selected_list = []
     set_display()
-        
-        
+     
+      
     root_node, joint_node_list = construct_tree()
     if joint_node_list: print("Step1: Construct Skeleton Tree Done.")
     else: pm.error("Step1 Failed! Coundn't construct skeleton tree.")
@@ -107,11 +107,11 @@ if __name__ == "__main__":
     print(f"Step3: Delete {delete_cnt} joints, counting for {delete_cnt/len(joint_node_list):.2%} of all joints. ")
         
     
-    for i in range(Epoch):
-        print(f"====================Epoch {i}================================")
-        cur_joint = greeedy_algorithm()
-        print(f"In Epoch {i}, the deleted joint is {cur_joint}")
-    print(f"Step4: Delete {Epoch} joints in total.")
+    # for i in range(Epoch):
+    #     print(f"====================Epoch {i}================================")
+    #     cur_joint = greeedy_algorithm()
+    #     print(f"In Epoch {i}, the deleted joint is {cur_joint}")
+    # print(f"Step4: Delete {Epoch} joints in total.")
     
     
     get_animation("SOTA")

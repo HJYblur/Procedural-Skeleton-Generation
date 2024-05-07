@@ -11,7 +11,7 @@ from importlib import reload
 reload(delete_joint_weight)
 
 eps = 1e-3
-error_thres = 1
+error_thres = 0.1
 
 class Skeleton_node:
     def __init__(self, name, parent=None, level=0, stability = False, weight=0, loss=0, deleted=False):
