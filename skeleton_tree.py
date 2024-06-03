@@ -292,7 +292,7 @@ def extract_all_joint_data(root):
     return
 
 
-def construct_tree(fbx_file_path = "E:/Animation Data/batch_pass_ball_fbx/test.fbx"):
+def construct_tree(fbx_file_path = "E:/Procedural Skeleton/Animation Data/batch_pass_ball_fbx/test.fbx"):
     # 初始化FBX Manager和场景
     manager = fbx.FbxManager.Create()
     scene = fbx.FbxScene.Create(manager, "Scene")

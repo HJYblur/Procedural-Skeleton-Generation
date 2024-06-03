@@ -32,10 +32,9 @@ def get_animation(type):
     delete_duplicate()
     hide_LOD(LOD_level, LOD_level)
     get_screenshot(LOD_level, type)
-    batch_delete_lod()
 
 
-def greeedy_algorithm():
+def greedy_algorithm():
     ratio_dic = {}
     
     for joint in joint_node_list:
@@ -58,6 +57,7 @@ def greeedy_algorithm():
             ratio_dic[joint_name] = joint.weight / joint.loss
             print(f"----{joint_name}     weight: {joint.weight}), loss:{joint.loss}, ratio: {ratio_dic[joint_name]}.")
             restore_weights(weights_backup)
+            batch_delete_lod()
               
     if not ratio_dic: return ""
     
@@ -76,14 +76,15 @@ if __name__ == "__main__":
     Low_Threshold = 0.995
     High_Threshold = 0.9999
     selected_list = []
-    set_display()
+    opt_step = 1
+    set_display() # 确认截图设置
      
-      
+    # 建骨骼树
     root_node, joint_node_list = construct_tree()
-    if joint_node_list: print("Step1: Construct Skeleton Tree Done.")
+    if joint_node_list: print("\nStep1: Construct Skeleton Tree Done.\n")
     else: pm.error("Step1 Failed! Coundn't construct skeleton tree.")
     
-    
+    # 生成原始LOD
     generate_combined_mesh_LODs(LOD_level)
     delete_duplicate()
     create_camera_list(LOD_level)
@@ -91,9 +92,9 @@ if __name__ == "__main__":
         hide_LOD(i, LOD_level)
         get_screenshot(i, "Original")
     batch_delete_lod()
-    print("Step2: Initial LOD generation Done.")
+    print("\nStep2: Initial LOD generation Done.\n")
         
-       
+    # 初步优化：通过骨骼间层级关系进行删减
     extract_all_joint_data(root_node)    
     ratio_dic = {}
     delete_cnt = 0
@@ -104,15 +105,17 @@ if __name__ == "__main__":
             delete_cnt += 1
             print(f"----{joint_name} has been appended to the list.")
             selected_list.append(joint_name)
-    print(f"Step3: Delete {delete_cnt} joints, counting for {delete_cnt/len(joint_node_list):.2%} of all joints. ")
+    print(f"\nStep3: Delete {delete_cnt} joints, counting for {delete_cnt/len(joint_node_list):.2%} of all joints. \n")
         
+    # 进一步优化，通过删除单根骨骼比较动画质量，再通过贪心算法确定删除的骨骼
+    if opt_step==2:
+        for i in range(Epoch):
+            print(f"====================Epoch {i}================================")
+            cur_joint = greedy_algorithm()
+            print(f"In Epoch {i}, the deleted joint is {cur_joint}")
+        print(f"Step4: Delete {Epoch} joints in total.")
     
-    # for i in range(Epoch):
-    #     print(f"====================Epoch {i}================================")
-    #     cur_joint = greeedy_algorithm()
-    #     print(f"In Epoch {i}, the deleted joint is {cur_joint}")
-    # print(f"Step4: Delete {Epoch} joints in total.")
-    
-    
+    # 得到最终的动画
     get_animation("SOTA")
-    print(f"Step5: Generate SOTA animation done.")
+    batch_delete_lod()
+    print(f"\nStep5: Generate SOTA animation done.")

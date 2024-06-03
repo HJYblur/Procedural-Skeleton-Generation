@@ -145,7 +145,7 @@ def screen_shot(start_time, end_time, step, des_path):
 def get_screenshot(LOD_level, des_folder):
     start_time = int(pm.playbackOptions(query=True, minTime=True))
     end_time = int(pm.playbackOptions(query=True, maxTime=True))
-    step = 5
+    step = 1
     for camera_name in camera_list:
         cur_camera = adjust_camera(camera_name, LOD_level)
         pm.lookThru(cur_camera)
